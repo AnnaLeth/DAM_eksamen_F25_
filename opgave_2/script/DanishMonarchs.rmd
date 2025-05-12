@@ -1,0 +1,151 @@
+---
+title: "Danish Kings"
+author: "Helene Knudsen"
+date: "2025-03-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+The task here is to load your Danish Monarchs csv into R using the `tidyverse` toolkit, calculate and explore the kings' duration of reign with pipes `%>%` in `dplyr` and plot it over time.
+
+## Load the kings
+
+Make sure to first create an  `.Rproj` workspace with a `data/` folder where you place either your own dataset or the provided `kings.csv` dataset. 
+
+1. Look at the dataset that are you loading and check what its columns are separated by? (hint: open it in plain text editor to see)
+
+List what is the
+
+separator: ,  
+
+2. Create a `kings` object in R with the different functions below and inspect the different outputs.
+-  `read.csv()`
+-  `read_csv()`
+-  `read.csv2()` 
+-  `read_csv2()`
+```{r eval=FALSE}
+# FILL IN THE CODE BELOW and review the outputs
+
+kings1 <- read.csv("data/danske_konger.csv")  
+
+kings2 <- read_csv("data/danske_konger.csv") 
+
+kings3 <- read.csv2("data/danske_konger.csv") 
+
+kings4 <- read_csv2("data/danske_konger.csv") 
+```
+Answer: 
+1. Which of these functions is a `tidyverse` function? Read data with it below into a `kings` object
+Alle de funtioner med underscore er tidyverse versioner (read_csv) og (read_csv2). Og den version, som jeg skal bruge af de to, er derfor Kings4, fordi når jeg læser denne funktion, får de bedste resultater i form af en tabel, som passer til min data
+
+2. What is the result of running `class()` on the `kings` object created with a tidyverse function.
+"Spec_tbl_df" = dataen er en tabel (som data.frame og tbl), men den er nu lavet til en mere advanceret version, spec_tbl_df, der inkludere mere detaljeret information om selve datasættet og formatet. Det viser, at mit data er i et tibbel (tbl) format, som tidyverse forstår som numerisk. Det er vigtigt, at tidyverse forstår dataen som numerisk, hvis jeg ønsker at kunne bruge dataen til at udregne forskellige ting. 
+
+3. How many columns does the object have when created with these different functions?
+Jeg bruger kommandoen "ncol(kings)" til gennem tidyverse at tælle antallet af kolonner i mit objekt. Dette viser mig, at der er 6 kolonner i min funktion.   
+
+4. Show the dataset so that we can see how R interprets each column
+Ved at skrive glimpse(kings) kan jeg få et overblik over hvordan R forstår hver kolonne. Dette viser at R forstår hver kolonne som numerisk undtagen kolonnen "danske regenter".   
+
+```{r eval = TRUE}
+# COMPLETE THE BLANKS BELOW WITH YOUR CODE, then turn the 'eval' flag in this chunk to TRUE.
+
+library(tidyverse)
+
+kings4 <- read_csv2("data/danske_konger.csv")
+
+kings <- kings4
+
+class(kings)
+
+ncol(kings)
+
+glimpse(kings)
+
+
+```
+
+## Calculate the duration of reign for all the kings in your table
+You can calculate the duration of reign in years with `mutate` function by subtracting the equivalents of your `startReign` from `endReign` columns and writing the result to a new column called `duration`. But first you need to check a few things:
+
+* Is your data messy? Fix it before re-importing to R
+* Do your start and end of reign columns contain NAs? Choose the right strategy to deal with them: `na.omit()`, `na.rm=TRUE`, `!is.na()`
+
+
+Create a new column called  `duration` in the kings dataset, utilizing the `mutate()` function from tidyverse. Check with your group to brainstorm the options.
+
+```{r}
+#your code
+kings_duration_no_na <- kings %>%
+  mutate(duration = Regeringperiodens_ende - `Regeringperiodens_ begyndelse`)
+
+class(kings_duration_no_na$duration)
+
+
+```
+
+## Calculate the average duration of reign for all rulers
+
+Den gennemsnitlige regeringstid for alle regenter er 19,39286 år inkl.Frederik d. 10, hvis regeringsperiode endnu ikke er slut 
+
+Do you remember how to calculate an average on a vector object? If not, review the last two lessons and remember that a column is basically a vector. So you need to subset your `kings` dataset to the `duration` column. If you subset it as a vector you can calculate average on it with `mean()` base-R function. If you subset it as a tibble, you can calculate average on it with `summarize()` tidyverse function. Try both ways!
+
+Den gennemsnitlige regeringstid for alle regenter er 19,39286 år inkl.Frederik d. 10, hvis regeringsperiode endnu ikke er slut 
+
+* You first need to know how to select the relevant `duration` column. What are your options?
+* Is your selected `duration` column a tibble or a vector? The `mean()` function can only be run on a vector. The `summarize()` function works on a tibble.
+* Are you getting an error that there are characters in your column? Coerce your data to numbers with `as.numeric()`.
+* Remember to handle NAs: `mean(X, na.rm=TRUE)`
+
+
+```{r}
+# YOUR CODE
+average <- mean(kings_duration_no_na$duration,na.rm = TRUE)
+```
+
+## How many and which kings enjoyed a longer-than-average duration of reign?
+Ud fra resultatet kan jeg se, at der er 26 konger, som har regeret i flere år end gennemsnittet på 19,39286 år. Se hvilke nedenfor
+
+You have calculated the average duration above. Use it now to `filter()` the `duration` column in  `kings` dataset. Display the result and also  count the resulting rows with `count()`
+
+```{r}
+# YOUR CODE
+longer_duration <- kings_duration_no_na %>% 
+  filter(duration>average) %>% 
+  arrange(desc(duration))
+
+longer_duration
+
+count(longer_duration)
+```
+
+
+## How many days did the three longest-ruling monarchs rule? 
+De tre længst regerende regenter er: Christian IV_myndig, Margrethe II, Christian IX. Se antallet af dage de hver især har regeret nedenfor. Jeg har angivet antallet af dage på et år som: 365,25.
+
+* Sort kings by reign `duration` in the descending order. Select the three longest-ruling monarchs with the `slice()` function
+* Use `mutate()` to create `Days` column where you calculate the total number of days they ruled
+* BONUS: consider the transition year (with 366 days) in your calculation!
+
+```{r}
+# YOUR CODE
+top_3_kings <- longer_duration %>% 
+  slice(1:3) %>% 
+  mutate(regerings_dage = `Varighed (antal år)`*365,25)
+
+
+top_3_kings
+
+
+```
+
+
+
+And to submit this rmarkdown, knit it into html. But first, clean up the code chunks, adjust the date, rename the author and change the `eval=FALSE` flag to `eval=TRUE` so your script actually generates an output.
+Well done!
+
+
