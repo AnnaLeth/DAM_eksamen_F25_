@@ -1,0 +1,522 @@
+---
+title: "Sentimentanalyse af danske taler omkring flygtningekrisen 2015"
+author: "Anna, Christine og Helene"
+date: "2025-05-09"
+output: html_document
+---
+
+#Setup - henter værktøjer til analyse
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+
+#Henter anbefalede værktøjer til analysen
+library(tidyverse)
+library(here)
+library(pdftools)
+library(tidytext)
+library(textdata) 
+library(ggwordcloud)
+```
+
+#Henter data, som er de 7 udvalgte taler fra danske partiformænd i perioden april-september 2015. 
+
+```{r hent dokumenter}
+#Henter pdf-læsningsværktøjer
+library(pdftools)
+library(here)
+list.files("/Users/christineclausen/Desktop/Final_Project/SentimentAnalysis/FP_work/data_taler")
+library(pdftools)
+
+# Opretter objekt for stien hen til mappen med taler
+taler_mappe <- "/Users/christineclausen/Desktop/Final_Project/SentimentAnalysis/FP_work/data_taler"
+
+# Opretter objekt - liste over PDF-filer
+taler_filer <- c("DF.pdf", "EL.pdf", "K.pdf", "R.pdf", "S.pdf", "SF.pdf", "V.pdf")
+
+# Skaber fulde filstier
+taler_stier <- file.path(taler_mappe, taler_filer)
+
+# Stopkode - tjekker at filerne er der, hvor vi forventer, de er 
+if (any(!file.exists(taler_stier))) {
+  stop("Nogle af filerne eksisterer ikke! Tjek stien:", taler_mappe)
+}
+
+# Læser tekst fra PDF-filer
+danske_taler_pdf <- lapply(taler_stier, pdf_text)
+
+DF <- pdf_text("/Users/christineclausen/Desktop/Final_Project/SentimentAnalysis/FP_work/data_taler/DF.pdf")
+EL <- pdf_text("/Users/christineclausen/Desktop/Final_Project/SentimentAnalysis/FP_work/data_taler/EL.pdf")
+K <- pdf_text("/Users/christineclausen/Desktop/Final_Project/SentimentAnalysis/FP_work/data_taler/K.pdf")
+R <- pdf_text("/Users/christineclausen/Desktop/Final_Project/SentimentAnalysis/FP_work/data_taler/R.pdf")
+S <- pdf_text("/Users/christineclausen/Desktop/Final_Project/SentimentAnalysis/FP_work/data_taler/S.pdf")
+SF <- pdf_text("/Users/christineclausen/Desktop/Final_Project/SentimentAnalysis/FP_work/data_taler/SF.pdf")
+V <- pdf_text("/Users/christineclausen/Desktop/Final_Project/SentimentAnalysis/FP_work/data_taler/V.pdf")
+
+# Navngiver listen med filnavne
+names(danske_taler_pdf) <- taler_filer
+
+# Tjekker, om jeg kan se teksten fra første tale (fra Dansk Folkeparti)
+cat(danske_taler_pdf[[1]])
+
+(danske_taler_pdf)[[1]]
+
+```
+
+#delkonklusion: med ovenstående koder får vi fat i det, vi ønsker, og kan se hele Kristian Thuelsen-Dahls tale, der er den første på listen. 
+
+```{r opretter tabel for talernes indhold}
+#henter nødvendige værktøjer
+library(stringr)
+library(tidyr)
+library(dplyr)
+library(purrr)
+
+# Omdaner listen med filnavne til en tibble med ID'er
+taler_tabel <- tibble(
+  id = names(danske_taler_pdf),
+  text_full = danske_taler_pdf
+) 
+
+
+# Opdeler teksten ved linjeskift og fjerner unødvendig whitespace
+taler_tabel <- taler_tabel %>%
+  mutate(text_split = map(text_full, ~ str_split(.x, pattern = "\\n")[[1]])) %>%
+  unnest(text_split) %>%
+  mutate(text_split = str_trim(text_split))
+
+# Tjekker, om jeg kan se de første linjer af første tale
+taler_tabel 
+
+# DF test
+#grepl(pattern= "Danmark", DF)
+
+#Opretter liste med nationalistiske ord 
+nationalistiske_ord <- c("danmark", "dansker", "dansk", "danske",
+                         "grænser", "grænse", "grænsekontrol", "samfund", "tradition", "os", "vores", "dem", "deres", "regeringen", "velfærdssamfundet", "bevare" )
+
+```
+
+```{r dansk folkepartis tale}
+# make this routine into a function that I can apply to all x speeches and combine into one big tibble of speech tokens for the purpose of ggplotting frequencies and counts of target terms. Avoid lists at all costs.
+
+DF <- DF %>%
+  tibble(id = "DF", text_full = DF) %>%
+  select(id, text_full) %>%
+  mutate(text_split = map(text_full, ~ str_split(.x, pattern = "\\n")[[1]])) %>%
+  unnest(text_split) %>%
+  mutate(text_split = str_trim(text_split)) %>%
+  unnest_tokens(word, text_split)
+
+DF %>% # this is a tibble of tokens where speech name is in ID column
+  filter(word %in% nationalistiske_ord) %>% 
+  #group_by(party_id)
+  count(word, sort =T)
+
+
+#Opretter GGplot
+library(ggplot2)
+
+DF %>%
+  filter(word %in% nationalistiske_ord) %>%  # Brug vektoren direkte
+  count(word, sort = TRUE) %>%
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_col(fill = "yellow") +
+  coord_flip() +  # Gør det nemmere at læse ord
+  labs(
+    title = "Forekomst af nationalistiske ord i DFs tale",
+    x = "Ord",
+    y = "Antal forekomster"
+  ) +
+  theme_minimal()
+  
+  #filter(grepl("danmark", word)) # this is just a test. Ask GPT to use summarize or count and apply it
+   
+```
+
+#Here it stops working !! I have trouble making the next code chuncks word. I have prepared the chuncks ahead anyway to make the next workflow easier. 
+```{r enhedslistens tale}
+
+EL <- EL %>%
+  tibble(id = "EL", text_full = EL) %>%
+  select(id, text_full) %>%
+  mutate(text_split = map(text_full, ~ str_split(.x, pattern = "\\n")[[2]])) %>%
+  unnest(text_split) %>%
+  mutate(text_split = str_trim(text_split)) %>%
+  unnest_tokens(word, text_split)
+
+EL %>% # this is a tibble of tokens where speech name is in ID column
+  filter(word %in% nationalistiske_ord) %>% 
+  #group_by(party_id)
+  count(word, sort =T)
+
+
+#Opretter GGplot
+library(ggplot2)
+
+EL %>%
+  filter(word %in% nationalistiske_ord) %>%  # Brug vektoren direkte
+  count(word, sort = TRUE) %>%
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_col(fill = "orange") +
+  coord_flip() +  # Gør det nemmere at læse ord
+  labs(
+    title = "Forekomst af nationalistiske ord i ELs tale",
+    x = "Ord",
+    y = "Antal forekomster"
+  ) +
+  theme_minimal()
+  
+```
+```{r Konservatives tale}
+
+K <- K %>%
+  tibble(id = "K", text_full = K) %>%
+  select(id, text_full) %>%
+  mutate(text_split = map(text_full, ~ str_split(.x, pattern = "\\n")[[3]])) %>%
+  unnest(text_split) %>%
+  mutate(text_split = str_trim(text_split)) %>%
+  unnest_tokens(word, text_split)
+
+K %>% # this is a tibble of tokens where speech name is in ID column
+  filter(word %in% nationalistiske_ord) %>% 
+  #group_by(party_id)
+  count(word, sort =T)
+
+
+#Opretter GGplot
+library(ggplot2)
+
+K %>%
+  filter(word %in% nationalistiske_ord) %>%  # Brug vektoren direkte
+  count(word, sort = TRUE) %>%
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_col(fill = "forestgreen") +
+  coord_flip() +  # Gør det nemmere at læse ord
+  labs(
+    title = "Forekomst af nationalistiske ord i Ks tale",
+    x = "Ord",
+    y = "Antal forekomster"
+  ) +
+  theme_minimal()
+  
+```
+
+```{r Radikale Venstres tale}
+
+R <- R %>%
+  tibble(id = "R", text_full = R) %>%
+  select(id, text_full) %>%
+  mutate(text_split = map(text_full, ~ str_split(.x, pattern = "\\n")[[4]])) %>%
+  unnest(text_split) %>%
+  mutate(text_split = str_trim(text_split)) %>%
+  unnest_tokens(word, text_split)
+
+R %>% # this is a tibble of tokens where speech name is in ID column
+  filter(word %in% nationalistiske_ord) %>% 
+  #group_by(party_id)
+  count(word, sort =T)
+
+
+#Opretter GGplot
+library(ggplot2)
+R %>%
+  filter(word %in% nationalistiske_ord) %>%  # Brug vektoren direkte
+  count(word, sort = TRUE) %>%
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_col(fill = "purple") +
+  coord_flip() +  # Gør det nemmere at læse ord
+  labs(
+    title = "Forekomst af nationalistiske ord i Rs tale",
+    x = "Ord",
+    y = "Antal forekomster"
+  ) +
+  theme_minimal()
+  
+```
+
+```{r Socialdemokratiets tale}
+
+S <- S %>%
+  tibble(id = "S", text_full = S) %>%
+  select(id, text_full) %>%
+  mutate(text_split = map(text_full, ~ str_split(.x, pattern = "\\n")[[5]])) %>%
+  unnest(text_split) %>%
+  mutate(text_split = str_trim(text_split)) %>%
+  unnest_tokens(word, text_split)
+
+S %>% # this is a tibble of tokens where speech name is in ID column
+  filter(word %in% nationalistiske_ord) %>% 
+  #group_by(party_id)
+  count(word, sort =T)
+
+
+#Opretter GGplot
+library(ggplot2)
+
+S %>%
+  filter(word %in% nationalistiske_ord) %>%  # Brug vektoren direkte
+  count(word, sort = TRUE) %>%
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_col(fill = "darkred") +
+  coord_flip() +  # Gør det nemmere at læse ord
+  labs(
+    title = "Forekomst af nationalistiske ord i Ss tale",
+    x = "Ord",
+    y = "Antal forekomster"
+  ) +
+  theme_minimal()
+  
+```
+
+```{r Socialistisk Folkeparti tale}
+
+SF <- SF %>%
+  tibble(id = "SF", text_full = SF) %>%
+  select(id, text_full) %>%
+  mutate(text_split = map(text_full, ~ str_split(.x, pattern = "\\n")[[6]])) %>%
+  unnest(text_split) %>%
+  mutate(text_split = str_trim(text_split)) %>%
+  unnest_tokens(word, text_split)
+
+SF %>% # this is a tibble of tokens where speech name is in ID column
+  filter(word %in% nationalistiske_ord) %>% 
+  #group_by(party_id)
+  count(word, sort =T)
+
+
+#Opretter GGplot
+library(ggplot2)
+
+SF %>%
+  filter(word %in% nationalistiske_ord) %>%  # Brug vektoren direkte
+  count(word, sort = TRUE) %>%
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_col(fill = "red") +
+  coord_flip() +  # Gør det nemmere at læse ord
+  labs(
+    title = "Forekomst af nationalistiske ord i SFs tale",
+    x = "Ord",
+    y = "Antal forekomster"
+  ) +
+  theme_minimal()
+  
+```
+
+```{r Socialistisk Folkeparti tale}
+V <- V %>%
+  tibble(id = "V", text_full = V) %>%
+  select(id, text_full) %>%
+  mutate(text_split = map(text_full, ~ str_split(.x, pattern = "\\n")[[7]])) %>%
+  unnest(text_split) %>%
+  mutate(text_split = str_trim(text_split)) %>%
+  unnest_tokens(word, text_split)
+
+V %>% # this is a tibble of tokens where speech name is in ID column
+  filter(word %in% nationalistiske_ord) %>% 
+  #group_by(party_id)
+  count(word, sort =T)
+
+
+#Opretter GGplot
+library(ggplot2)
+
+V %>%
+  filter(word %in% nationalistiske_ord) %>%  # Brug vektoren direkte
+  count(word, sort = TRUE) %>%
+  ggplot(aes(x = reorder(word, n), y = n)) +
+  geom_col(fill = "mediumblue") +
+  coord_flip() +  # Gør det nemmere at læse ord
+  labs(
+    title = "Forekomst af nationalistiske ord i Vs tale",
+    x = "Ord",
+    y = "Antal forekomster"
+  ) +
+  theme_minimal()
+```
+
+
+#From here, our work is only the things left from our original plot where we have deleted what we dont think is necessary. 
+Below, we want a ggplot with one color repressenting each speech (DF, EL, K, R, S, SF, V). 
+There will be "number of mentions of nationalistic words up the y-axis and the 16 nationalistic words on the x-axis. 
+This graph is made to compare popularity of words: which words are mentioned of all parties? and which are only mentioned by one party? This is interesting as it reveals the limitations of a computer - showing that we need to take the context into account. 
+
+We are aware that we could also divide the total number of nationalistic words by the total number of words in each speech to account for different speech lenghts. We did not do it the first time, we did this analysis, as we were happy with the ggplot, that this code below made: 
+
+
+#ANALYSE 1: PRÆVALENS AF NATIONALISTISKE ORD PÅ TVÆRS AF DE 7 TALER
+
+
+```{r prævalens af nationalistiske ord på tværs af de 7 taler}
+#Visualisering med GGplot
+ggplot(nationalistiske_ord, aes(x = word, y = n, fill = id)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_x_discrete(limits = unique(nationalistiske_ord$word)) +  # Sikrer alle ord vises
+  labs(title = "Forekomst af nationalistiske ord fordelt på taler",
+       x = "Nationalistiske ord", y = "Antal forekomster") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotér ordnavne for bedre læsbarhed
+
+```
+#KONKLUSION ANALYSE 1 (UDBYG I OPGAVE!!!)
+Vi har lavet en illustration, der viser forkomsten af de forskellige nationalistiske ord, vi har defineret, i de respektive taler. 
+Visualiseringens styrke er at den kan visualisere, hvilke ord der nævnes blandt flere af partiformændene i deres taler (eksempel:"Danmark", "Dansk", "vores ), og hvilke ord, der kun nævnes af få partier ("grænsekontrol" = DF, "bevare" = DF, "velfærdssamfundet" = S)
+Grafen kan også bruges til at visualisere, hvor ofte hvert af de nationalistiske ord nævnes af de respektive partier i deres taler. 
+Eksempelvis bruges ordet "Vores" meget oftere i talen fra Socialdemokratiet, end det bruges i talen fra Radikale Venstre. Det kan være et interessant diskussionspunkt = har Socialdemokratiet travlt med at tale til en gruppe, der skal føle sig som ét "vi"? Mens Radikale Venstre ikke har samme fokus på at skabe en national identitet? 
+
+Værd at overveje er også, at talerne ikke er lige lange, og at de er læst og fortolket af en computer - vores konklusion er derfor også, at man skal læse talerne for at forstå, hvilke sammenhænge et ord som "vores" bruges i. 
+
+
+
+#ANALYSE 2: SENTIMENTANALYSE MED DET DANSKE VÆRKTØJ "SENTIDA"
+
+```{r Sentida - forberedelse til sentimentanalyse }
+
+# Installérer og indlæs Sentida-pakken
+
+if(!require("devtools")) install.packages("devtools")
+devtools::install_github("Guscode/Sentida")
+library(Sentida)
+
+#sørger for, at R kan genkende æøå på mac
+Sys.setlocale(category = "LC_ALL", locale = "UTF-8") 
+
+
+#Genhenter øvrige pakker
+library(pdftools)
+library(tibble)
+library(dplyr)
+
+
+# Konverter listen til tibble for sentimentanalyse og opretter kolonner for både total og gennemsnitlig senitmentscore
+# Opretter tibble med korrekt ID-matching
+taler_sentiment <- tibble(
+  id = names(danske_taler),
+  tekst = lapply(danske_taler, paste, collapse = " ")  # Sikrer at hver tale er én lang tekst
+) %>%
+mutate(
+  total_sentiment = sapply(tekst, sentida, output = "total"),  # Beregner samlet sentimentscore
+  mean_sentiment = sapply(tekst, sentida, output = "mean")  # Beregner gennemsnitlig sentimentscore
+)
+
+#undersøger, hvordan R har løst opgaven
+print(taler_sentiment)
+
+```
+#Delkonklusion og forklaring af total og mean sentiment score
+Forklaring: 
+Total_sentiment viser talernes samlede følelsesmæssige værdi. DF, der også er den længste tale, har den højeste værdi (705,32) mens EL, der er den korteste tale, har den laveste følelsesmæssige værdi (97,04). Dette giver god mening - Total score er nemlig afhængig af antallet af talens længde. 
+Mean_sentiment viser talens gennemsnitlige følelsesmæssige ladning pr. ord, og er derfor uafhængigt af talens længde. 
+Her har SFs tale den højeste positive score (0,47), S har den laveste score (0,26). 
+
+
+```{r visualisering af total og gennemsnitlig sentimentscore }
+
+combined_df <- taler_sentiment %>%
+  left_join(nationalistiske_ord_df, by = "id")
+
+
+#laver visuel sammenligning af total sentiment score og mean sentiment score 
+ggplot(combined_df, aes(x = factor(id))) +
+  geom_col(aes(y = total_sentiment, fill = "Total sentiment"), position = position_dodge(width = 0.8), width = 0.6) +  # Tegnes først
+  geom_col(aes(y = mean_sentiment*100, fill = "Mean sentiment"), position = position_dodge(width = 0.8), width = 0.6) +  # Tegnes bagefter
+  scale_fill_manual(values = c("Total sentiment" = "#D7263D", "Mean sentiment" = "#0072B2")) +  # Blå farve bevaret
+  labs(title = "Sammenligning af mean og total sentimentscore per tale",
+       subtitle = "Synlig forskel på måling af total og gennemsnitlig sentiment score",
+       x = "Tale (PDF-navn)", y = "Sentimentscore",
+       fill = "Sentiment type") +
+  theme_minimal()
+```
+#Delkonklusion: 
+Ud fra ovenstående visualisering ser vi tydeligt, at der er meget stor forskel på total sentiment score (rød) i forhold til forskellen på gennemsnitlig sentiment score (blå). 
+Denne sammenhæng vil vi gerne undersøge yderligere for at se, hvordan sammenhængen mellem forekomsten af nationalistiske ord er ift. total sentiment score og mean sentiment score. 
+
+
+
+
+#Delanalyse 2.1: Total sentiment og brug af nationalistiske ord 
+
+```{r - oprettelse af liste over nationalistiske ord i hver tale}
+# Konverter ord til små bogstaver for korrekt match
+taler_ord <- taler_ord %>%
+  mutate(word = tolower(word))
+
+nationalistiske_tokens <- tolower(nationalistiske_tokens)
+
+# Optælling af nationalistiske ord pr. tale
+nationalistiske_count <- taler_ord %>%
+  filter(word %in% nationalistiske_tokens) %>%
+  count(id, name = "antal_nationalistiske_ord")
+
+# Optælling af total antal ord pr. tale
+total_word_count <- taler_ord %>%
+  count(id, name = "word_count")
+
+# Sammenflet tabeller og beregn hyppighed af nationalistiske ord
+result_table <- left_join(total_word_count, nationalistiske_count, by = "id") %>%
+  mutate(hvert_y_ord_er_nationalistisk = word_count / antal_nationalistiske_ord)
+
+
+# Aggregér antallet af nationalistiske ord pr. tale (ID)
+antal_nationalistiske_ord <- nationalistiske_ord_df %>%
+  group_by(id) %>%
+  summarise(antal_nationalistiske_ord = sum(n))
+
+# Sammenflet tabellerne
+result_table <- left_join(total_word_count, antal_nationalistiske_ord, by = "id") %>%
+  mutate(hvert_y_ord_er_nationalistisk = word_count / antal_nationalistiske_ord)
+
+# Udskift NA-værdier med 0 (hvis en tale ikke har nationalistiske ord)
+result_table[is.na(result_table)] <- 0
+
+# Print resultatet
+print(result_table)
+
+```
+
+```{r - total_sentiment og brug af nationalistiske ord}
+# opdaterer tabel
+combined_df <- left_join(combined_df, result_table, by = "id")
+
+#opretter GGplot for sammenhæng mellem total sentiment og samlet antal nationalistiske ord i talerne
+ggplot(combined_df, aes(x = total_sentiment, y = antal_nationalistiske_ord, color = id)) +
+  geom_point(size = 4, alpha = 0.8) +  # Punktplot med gennemsigtighed
+  geom_smooth(method = "lm", se = FALSE, color = "black") +  # Tendenslinje (flad)
+  scale_color_manual(values = c("#FFE119", "#F58231", "#3CB44B", "#911EB4", "#E6194B", "#436D78", "#42D4F4")) +  # Maksimal farvekontrast
+  labs(title = "Sammenhæng mellem nationalistiske ord og total sentiment-score",
+       subtitle = "Hver tale repræsenteret som et datapunkt.",
+       x = "Total sentiment-score", y = "Antal nationalistiske ord",
+       color = "Tale (PDF-filer)") +
+  theme_minimal()
+```
+#Delkonklusion 2.1: Her ses sammenhæng mellem antal nationalistiske ord og den totale sentimentscore. 
+Helt i bund er enhedslisten, der har færrest nationalistiske og ord også er den korteste tale. 
+I top har vi DF, der har mange nationalitiske ord og også er en lang tale.
+
+
+#Delanalyse 2.2: mean sentiment og brug af nationalistiske ord 
+```{r mean_sentiment_plot}
+
+#opretter visualisering af sammenhæng mellem nationalistiske og mean sentiment score 
+print (
+ggplot(combined_df, aes(x = mean_sentiment, y = hvert_y_ord_er_nationalistisk, color = factor(id))) +
+  geom_point(size = 4, alpha = 0.8) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  scale_color_manual(values = c("#FFE119", "#F58231", "#3CB44B", "#911EB4", "#E6194B", "#436D78", "#42D4F4")) +
+  labs(title = "Sammenhæng mellem nationalistiske ord og mean sentiment-score",
+       subtitle = "Hver tale repræsenteret som et datapunkt",
+       x = "Mean sentiment-score", y = "1 ud af Y ord er nationalistisk",
+       color = "Tale (PDF-filer)") +
+  theme_minimal()
+  )
+```
+
+
+```{r beregning_rkoefficient_pværdi }
+model <- lm(n ~ mean_sentiment, data = combined_df)
+
+# Viser resultatet
+summary(model)
+
+```
