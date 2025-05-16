@@ -1,0 +1,406 @@
+---
+title: "Sentimentanalyse af danske taler omkring flygtningekrisen 2015"
+author: "Anna, Christine og Helene"
+date: "2025-05-09"
+output: html_document
+---
+
+#Setup - henter værktøjer til analyse
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+
+#Henter anbefalede værktøjer til analysen
+library(tidyverse)
+library(here)
+library(pdftools)
+library(tidytext)
+library(textdata) 
+library(ggwordcloud)
+```
+
+#Henter data, som er de 7 udvalgte taler fra danske partiformænd i perioden april-september 2015. 
+
+```{r hent dokumenter}
+#Henter pdf-læsningsværktøjer
+library(pdftools)
+library(here)
+list.files("/Users/christineclausen/Desktop/Final_Project/SentimentAnalysis/FP_work/data_taler")
+library(pdftools)
+
+# Opretter objekt for stien hen til mappen med taler
+taler_mappe <- "/Users/christineclausen/Desktop/Final_Project/SentimentAnalysis/FP_work/data_taler"
+
+# Opretter objekt - liste over PDF-filer
+taler_filer <- c("DF.pdf", "EL.pdf", "K.pdf", "R.pdf", "S.pdf", "SF.pdf", "V.pdf")
+
+# Skaber fulde filstier
+taler_stier <- file.path(taler_mappe, taler_filer)
+
+# Checker at filer findes
+if (any(!file.exists(taler_stier))) {
+  stop("Nogle af filerne eksisterer ikke! Tjek stien:", taler_mappe)
+}
+
+# Læser tekst fra PDF-filer
+danske_taler <- lapply(taler_stier, pdf_text)
+
+# Navngiver listen med filnavne
+names(danske_taler) <- taler_filer
+
+# Tjekker, om jeg kan se teksten fra første tale (fra Dansk Folkeparti)
+cat(danske_taler[[1]])
+```
+
+#delkonklusion: med ovenstående koder får vi fat i det, vi ønsker, og kan se hele Kristian Thuelsen-Dahls tale, der er den første på listen. 
+
+```{r opretter tabel for talernes indhold}
+#henter nødvendige værktøjer
+library(stringr)
+library(tidyr)
+library(dplyr)
+library(purrr)
+
+# Omdaner listen med tilnavne til en tibble med ID'er
+taler_df <- tibble(
+  id = names(danske_taler),
+  text_full = danske_taler
+) 
+
+# Opdeler teksten ved linjeskift og fjerner unødvendig whitespace
+taler_df <- taler_df %>%
+  mutate(text_split = map(text_full, ~ str_split(.x, pattern = "\\n")[[1]])) %>%
+  unnest(text_split) %>%
+  mutate(text_split = str_trim(text_split))
+
+# Tjekker, om jeg kan se de første linjer af første tale
+head(taler_df)
+```
+#Delkonklusion: Vi er lykkedes med at inddele talernes indhold i linjer i tabeller. 
+
+
+#FORBEREDELSE TIL ANALYSE 1: opdeling af linjerne i enkeltord. 
+```{r tokenisering}
+#Henter relevanter værktøjer
+library(tidytext)
+library(dplyr)
+
+# Opdeler teksten i ord
+taler_tokens <- taler_df %>%
+  unnest_tokens(word, text_split)  # 'text_split' er din kolonne med linjer
+
+
+# Se de første ord
+head(taler_tokens)
+```
+#Delkonklusion: vi er lykkedes med at tokenisere talerne. 
+
+For at kunne arbejde mere effektivt med forekomsten af nationalistiske ord i talerne, indsætter vi den stopordsliste, vi har oprettet ved at omsætte voyant-listen til et R-format vha. regex. 
+OBS! Vi har i forhold til denne opgave FJERNET ord fra stopordslisten, vi mener (med udgangspunkt i teori) kan bruges i en nationalistisk sammenhæng. 
+
+Disse ord er os, dem, vores, deres. 
+
+#Fjerner nu danske stopord manuelt fra talerne: 
+```{r fjerner danske stopord manuelt}
+danske_stopord <- c("ad", "af", "aldrig", "alene", "alle", "allerede", "alligevel", "alt",
+                    "altid", "anden", "andet", "andre", "at", "bag", "bare", "begge", 
+                    "bl.a.", "blandt", "blev", "blive", "bliver", "burde", "både", "bør",
+                    "ca.", "d", "da", "dag", "de", "del", "den", "denne", "dens","dem", 
+                    "der","deres",  "derefter", "derfor", "derfra", "deri", "dermed", "derpå",
+                    "derved", "det", "dette", "dig", "din", "dine", "disse", "dit", "dog", "du",
+                    "efter", "egen", "ej", "eller", "ellers", "en", "end", "endnu", "ene",
+                    "eneste", "enhver", "ens", "enten", "er", "et", "f.eks.", "far", "fem",
+                    "fik", "fire", "flere", "flest", "fleste", "for", "foran", "fordi", 
+                    "forrige", "fra", "fx", "få", "får", "før", "først", "gang", "gennem",
+                    "gerne", "gjorde", "gjort", "god", "godt", "går", "gør", "gøre", "gørende",
+                    "ham", "han", "hans", "har", "havde", "have", "hej", "hel", "hele",
+                    "heller", "helt", "hen", "hende", "hendes", "henover", "her", "herefter",
+                    "heri", "hermed", "herpå", "hos", "hun", "hvad", "hvem", "hver", "hvilke",
+                    "hvilken", "hvilkes", "hvis", "hvor", "hvordan", "hvorefter", "hvorfor",
+                    "hvorfra", "hvorhen", "hvori", "hvorimod", "hvornår", "hvorved", "i", "igen",
+                    "igennem", "ikke", "imellem", "imens", "imod", "ind", "indtil", "ingen",
+                    "intet", "ja", "jeg", "jer", "jeres", "jo", "kan", "kom", "komme", "kommer",
+                    "kun", "kunne", "lad", "langs", "lav", "lave", "lavet", "lidt", "lige",
+                    "ligesom", "lille", "længere", "løkke", "man", "mand", "mange", "med",
+                    "meget", "mellem", "men", "mens", "mere", "mest", "mig", "min", "mindre",
+                    "mindst", "mine", "mit", "mod", "må", "måske", "ned", "nej", "nemlig", "ni",
+                    "nogen", "nogensinde", "noget", "nogle", "nok", "nu", "ny", "nyt", "når",
+                    "næste", "næsten", "og", "også", "okay", "om", "omkring", "op", "otte",
+                    "over", "overalt", "pga.", "på", "samme", "sammen", "se", "seks", "selv",
+                    "selvom", "senere", "ser", "ses", "siden", "sig", "sige", "sin", "sine",
+                    "sit", "skal", "skulle", "som", "stadig", "stor", "store", "står", "synes",
+                    "syntes", "syv", "så", "sådan", "således", "tag", "tage", "temmelig", 
+                    "thi", "ti", "tidligere", "til", "tilbage", "tit", "to", "tre", "ud",
+                    "uden", "udover", "under", "undtagen", "var", "ved", "vi", "via", "vil",
+                    "ville", "vor", "vore", "vores", "vær", "være", "været", "år", "øvrigt")
+
+# Omdanner stopordene til tibble for filtrering
+stopord_df <- tibble(word = danske_stopord)
+
+# Fjerner stopord fra datasættet
+taler_tokens <- taler_ord %>%
+  anti_join(stopord_df, by = "word")
+
+# Se de første ord efter filtrering
+head(taler_tokens)
+```
+#Delkonklusion: vi er lykkedes med at fjerne ord fra stoplisten. 
+
+
+#Efter fjernelsen af stopord er det interessant at undersøge, om de oftest forekommende ord er de samme som de ord, Voyant fandt. 
+
+```{r ordoptælling}
+taler_wc <- taler_tokens %>%
+  count(word) %>%
+  arrange(-n)
+
+# Se de mest brugte ord
+head(taler_tokens, 10)
+```
+#Delkonklusion (!!!) - de 10 mest brugte ord, Rstudios finder, svarer fint til de 10 mest brugte ord, Voyant fandt. 
+
+#ANALYSE 1: PRÆVALENS AF NATIONALISTISKE ORD I DE 7 TALER
+```{r søgen efter nationalistiske ord }
+#Opretter en liste med ord, vi vurderer som nationalistiske (ud fra teori, voyant-wordcloud og forslag fra Microsoft Copilot)
+nationalistiske_ord <- c("danmark", "dansker", "dansk", 
+                         "grænser", "grænse", "grænsekontrol", "samfund", "tradition", "os", "vores", "dem", "deres", "regeringen", "velfærdssamfundet", "bevare" )
+```
+
+```{r filtrering }
+# Filtrer kun nationalistiske ord
+nationalistiske_tokens <- taler_tokens %>%
+  filter(word %in% nationalistiske_ord) %>%
+  count(word, sort = TRUE)
+```
+
+```{r resultat }
+# Se resultatet
+print(nationalistiske_tokens)
+```
+#Delkonklusion: 
+"Danmark" og "vores" er de mest brugte ord af nationalistisk karakter. Herefter kommer ordene "os" og "dem". 
+
+```{r visualisering af forkomst af nationalistiske ord i alle taler }
+
+ggplot(nationalistiske_tokens, aes(x = reorder(word, -n), y = n)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Forekomst af nationalistiske ord i talerne",
+       x = "Nationalistiske ord", y = "Antal forekomster") +
+  theme_minimal()
+
+```
+
+
+```{r visualisering af forkomst af nationalistiske ord i hver taler }
+
+# Omdanner liste til dataframe med korrekt ID
+taler_df <- tibble(
+  id = rep(names(danske_taler), times = sapply(danske_taler, function(x) length(unlist(strsplit(x, "\\n"))))),
+  text_full = unlist(strsplit(unlist(danske_taler), "\\n")) # Opdeler teksten præcist
+) 
+
+# Opdeler i ord
+taler_tokens <- taler_df %>%
+  unnest_tokens(word, text_full)
+
+# Tjekker om ID'er er matchet korrekt
+head(taler_df)
+
+# Optæller nationalistiske ord per tale
+nationalistiske_ord_df <- taler_tokens %>%
+  filter(word %in% nationalistiske_ord) %>%
+  count(id, word)  #'id' er talens navn, korrekt tælling af ord pr. tale
+  
+## Visualisering med ggplot
+  
+  
+# Tjekker om data eksisterer
+print(nationalistiske_ord_df)
+
+# Konverterer id til faktor for ggplot
+nationalistiske_ord_df <- nationalistiske_ord_df %>%
+  mutate(id = as.factor(id))
+
+#fjerner filtreringen for at undgå at grafen kun viser 6 ord på x-aksen
+nationalistiske_ord_df <- nationalistiske_ord_df %>%
+  filter(n > 0)
+
+#Visualisering med GGplot
+ggplot(nationalistiske_ord_df, aes(x = word, y = n, fill = id)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_x_discrete(limits = unique(nationalistiske_ord_df$word)) +  # Sikrer alle ord vises
+  labs(title = "Forekomst af nationalistiske ord fordelt på taler",
+       x = "Nationalistiske ord", y = "Antal forekomster") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotér ordnavne for bedre læsbarhed
+
+```
+#KONKLUSION ANALYSE 1 (UDBYG I OPGAVE!!!)
+Vi har lavet en illustration, der viser forkomsten af de forskellige nationalistiske ord, vi har defineret, i de respektive taler. 
+Visualiseringens styrke er at den kan visualisere, hvilke ord der nævnes blandt flere af partiformændene i deres taler (eksempel:"Danmark", "Dansk", "vores ), og hvilke ord, der kun nævnes af få partier ("grænsekontrol" = DF, "bevare" = DF, "velfærdssamfundet" = S)
+Grafen kan også bruges til at visualisere, hvor ofte hvert af de nationalistiske ord nævnes af de respektive partier i deres taler. 
+Eksempelvis bruges ordet "Vores" meget oftere i talen fra Socialdemokratiet, end det bruges i talen fra Radikale Venstre. Det kan være et interessant diskussionspunkt = har Socialdemokratiet travlt med at tale til en gruppe, der skal føle sig som ét "vi"? Mens Radikale Venstre ikke har samme fokus på at skabe en national identitet? 
+
+Værd at overveje er også, at talerne ikke er lige lange, og at de er læst og fortolket af en computer - vores konklusion er derfor også, at man skal læse talerne for at forstå, hvilke sammenhænge et ord som "vores" bruges i. 
+
+
+
+#ANALYSE 2: SENTIMENTANALYSE MED DET DANSKE VÆRKTØJ "SENTIDA"
+
+```{r Sentida - forberedelse til sentimentanalyse }
+
+# Installérer og indlæs Sentida-pakken
+
+if(!require("devtools")) install.packages("devtools")
+devtools::install_github("Guscode/Sentida")
+library(Sentida)
+
+#sørger for, at R kan genkende æøå på mac
+Sys.setlocale(category = "LC_ALL", locale = "UTF-8") 
+
+
+#Genhenter øvrige pakker
+library(pdftools)
+library(tibble)
+library(dplyr)
+
+
+# Konverter listen til tibble for sentimentanalyse og opretter kolonner for både total og gennemsnitlig senitmentscore
+# Opretter tibble med korrekt ID-matching
+taler_sentiment <- tibble(
+  id = names(danske_taler),
+  tekst = lapply(danske_taler, paste, collapse = " ")  # Sikrer at hver tale er én lang tekst
+) %>%
+mutate(
+  total_sentiment = sapply(tekst, sentida, output = "total"),  # Beregner samlet sentimentscore
+  mean_sentiment = sapply(tekst, sentida, output = "mean")  # Beregner gennemsnitlig sentimentscore
+)
+
+#undersøger, hvordan R har løst opgaven
+print(taler_sentiment)
+
+```
+#Delkonklusion og forklaring af total og mean sentiment score
+Forklaring: 
+Total_sentiment viser talernes samlede følelsesmæssige værdi. DF, der også er den længste tale, har den højeste værdi (705,32) mens EL, der er den korteste tale, har den laveste følelsesmæssige værdi (97,04). Dette giver god mening - Total score er nemlig afhængig af antallet af talens længde. 
+Mean_sentiment viser talens gennemsnitlige følelsesmæssige ladning pr. ord, og er derfor uafhængigt af talens længde. 
+Her har SFs tale den højeste positive score (0,47), S har den laveste score (0,26). 
+
+
+```{r visualisering af total og gennemsnitlig sentimentscore }
+
+combined_df <- taler_sentiment %>%
+  left_join(nationalistiske_ord_df, by = "id")
+
+
+#laver visuel sammenligning af total sentiment score og mean sentiment score 
+ggplot(combined_df, aes(x = factor(id))) +
+  geom_col(aes(y = total_sentiment, fill = "Total sentiment"), position = position_dodge(width = 0.8), width = 0.6) +  # Tegnes først
+  geom_col(aes(y = mean_sentiment*100, fill = "Mean sentiment"), position = position_dodge(width = 0.8), width = 0.6) +  # Tegnes bagefter
+  scale_fill_manual(values = c("Total sentiment" = "#D7263D", "Mean sentiment" = "#0072B2")) +  # Blå farve bevaret
+  labs(title = "Sammenligning af mean og total sentimentscore per tale",
+       subtitle = "Synlig forskel på måling af total og gennemsnitlig sentiment score",
+       x = "Tale (PDF-navn)", y = "Sentimentscore",
+       fill = "Sentiment type") +
+  theme_minimal()
+```
+#Delkonklusion: 
+Ud fra ovenstående visualisering ser vi tydeligt, at der er meget stor forskel på total sentiment score (rød) i forhold til forskellen på gennemsnitlig sentiment score (blå). 
+Denne sammenhæng vil vi gerne undersøge yderligere for at se, hvordan sammenhængen mellem forekomsten af nationalistiske ord er ift. total sentiment score og mean sentiment score. 
+
+
+
+
+#Delanalyse 2.1: Total sentiment og brug af nationalistiske ord 
+
+```{r - oprettelse af liste over nationalistiske ord i hver tale}
+# Konverter ord til små bogstaver for korrekt match
+taler_ord <- taler_ord %>%
+  mutate(word = tolower(word))
+
+nationalistiske_tokens <- tolower(nationalistiske_tokens)
+
+# Optælling af nationalistiske ord pr. tale
+nationalistiske_count <- taler_ord %>%
+  filter(word %in% nationalistiske_tokens) %>%
+  count(id, name = "antal_nationalistiske_ord")
+
+# Optælling af total antal ord pr. tale
+total_word_count <- taler_ord %>%
+  count(id, name = "word_count")
+
+# Sammenflet tabeller og beregn hyppighed af nationalistiske ord
+result_table <- left_join(total_word_count, nationalistiske_count, by = "id") %>%
+  mutate(hvert_y_ord_er_nationalistisk = word_count / antal_nationalistiske_ord)
+
+
+# Aggregér antallet af nationalistiske ord pr. tale (ID)
+antal_nationalistiske_ord <- nationalistiske_ord_df %>%
+  group_by(id) %>%
+  summarise(antal_nationalistiske_ord = sum(n))
+
+# Sammenflet tabellerne
+result_table <- left_join(total_word_count, antal_nationalistiske_ord, by = "id") %>%
+  mutate(hvert_y_ord_er_nationalistisk = word_count / antal_nationalistiske_ord)
+
+# Udskift NA-værdier med 0 (hvis en tale ikke har nationalistiske ord)
+result_table[is.na(result_table)] <- 0
+
+# Print resultatet
+print(result_table)
+
+```
+
+```{r - total_sentiment og brug af nationalistiske ord}
+# opdaterer tabel
+combined_df <- left_join(combined_df, result_table, by = "id")
+
+#opretter GGplot for sammenhæng mellem total sentiment og samlet antal nationalistiske ord i talerne
+ggplot(combined_df, aes(x = total_sentiment, y = antal_nationalistiske_ord, color = id)) +
+  geom_point(size = 4, alpha = 0.8) +  # Punktplot med gennemsigtighed
+  geom_smooth(method = "lm", se = FALSE, color = "black") +  # Tendenslinje (flad)
+  scale_color_manual(values = c("#FFE119", "#F58231", "#3CB44B", "#911EB4", "#E6194B", "#436D78", "#42D4F4")) +  # Maksimal farvekontrast
+  labs(title = "Sammenhæng mellem nationalistiske ord og total sentiment-score",
+       subtitle = "Hver tale repræsenteret som et datapunkt.",
+       x = "Total sentiment-score", y = "Antal nationalistiske ord",
+       color = "Tale (PDF-filer)") +
+  theme_minimal()
+```
+#Delkonklusion 2.1: Her ses sammenhæng mellem antal nationalistiske ord og den totale sentimentscore. 
+Helt i bund er enhedslisten, der har færrest nationalistiske og ord også er den korteste tale. 
+I top har vi DF, der har mange nationalitiske ord og også er en lang tale.
+
+
+#Diskussion: hvor mange ord er der i hver tale, når du total sentiment score er så afhængigt af antal ord i hver tale? 
+
+UNDERSØG hvor mange ord, der er i hver tale. Jeg kan ikke løse det med R, men man kan måske optælle det manuelt. 
+
+
+
+#Delanalyse 2.2: mean sentiment og brug af nationalistiske ord 
+```{r mean_sentiment_plot}
+
+#opretter visualisering af sammenhæng mellem nationalistiske og mean sentiment score 
+print (
+ggplot(combined_df, aes(x = mean_sentiment, y = hvert_y_ord_er_nationalistisk, color = factor(id))) +
+  geom_point(size = 4, alpha = 0.8) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  scale_color_manual(values = c("#FFE119", "#F58231", "#3CB44B", "#911EB4", "#E6194B", "#436D78", "#42D4F4")) +
+  labs(title = "Sammenhæng mellem nationalistiske ord og mean sentiment-score",
+       subtitle = "Hver tale repræsenteret som et datapunkt",
+       x = "Mean sentiment-score", y = "1 ud af Y ord er nationalistisk",
+       color = "Tale (PDF-filer)") +
+  theme_minimal()
+  )
+```
+
+
+```{r beregning_rkoefficient_pværdi }
+model <- lm(n ~ mean_sentiment, data = combined_df)
+
+# Viser resultatet
+summary(model)
+
+```
