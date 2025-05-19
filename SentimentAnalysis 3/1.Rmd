@@ -1,0 +1,133 @@
+---
+title: "nyt final project"
+author: "Anna, Helene, Christine"
+date: "2025-05-16"
+output: html_document
+---
+
+```{r henter det nødvendige værktøj/pakker udover sentida til analysen }
+library(tidyverse)
+library(tidytext)
+library(ggwordcloud)
+library(readtext)
+
+```
+
+```{r henter data og opretter et objekt}
+danske_taler<-tibble(readtext("FP_work/data_taler/*pdf"))
+
+```
+
+
+```{r splittet teksterne op i sætninger og ord samt opretter begge dele som objekt}
+danske_taler_sætninger <- danske_taler %>% 
+  unnest_sentences(sentence, text)
+
+danske_taler_ord <- danske_taler %>% 
+  unnest_tokens(word, text)
+
+```
+
+```{r oprette liste med nationalistiske ord}
+nationalistiske_ord <- c("danmark", "dansker", "dansk",
+                         "grænser", "grænse", "grænsekontrol", "samfund", "tradition", "os", "vores", "dem", "deres", "regeringen", "velfærdssamfundet", "bevare" )
+
+
+```
+
+```{r tæller antal ord i hver tale for senere at kunne sammenligne dem}
+danske_taler_total_ord <- danske_taler_ord %>% 
+  group_by(doc_id) %>% 
+  count(word, sort = TRUE) %>% 
+  summarise(total_ord = sum(n))
+  
+```
+
+```{r Tæller antal nationalistiske ord og laver to nye kolloner: total ord og procentdel. Laver efterfølgende visualiseringen.}
+danske_taler_nat_ord_vis<- danske_taler_ord %>% 
+  group_by(doc_id) %>% 
+  count(word, sort = TRUE) %>% 
+  left_join(danske_taler_total_ord, by = "doc_id") %>%
+  ungroup() %>% 
+  mutate(procentdel = n/total_ord) %>% 
+  filter(word %in%nationalistiske_ord)%>% 
+  ggplot(aes(x = reorder(doc_id, procentdel), y = procentdel, fill = doc_id)) +
+  geom_col() +
+  facet_wrap(~word, ncol = 3) +
+  coord_flip() +  # Gør det nemmere at læse ord
+  labs(
+    title = "Nationalistiske ords fremkomst i procent",
+    x = "procentvis forekomst i given tale",
+    y = "nationalistiske ord"
+  ) +
+  theme_minimal()
+
+print(danske_taler_nat_ord_vis)
+```
+
+```{r Gemmer visulaisering som png-fil}
+ggsave("visualisering/danske_taler_nat_ord_vis.png", danske_taler_nat_ord_vis, bg = "white")
+```
+#Opsummering: Analyse 1 - Vi har lavet en illustration, der viser forekomsten af de forskellige nationalistiske ord, vi har defineret, i procentdel, da talerne er af meget forskellig længde. Visualiserings styrke er, at den kan visualisere, hvilke ord der nævnes blandt partiformænd i deres taler. Visualiseringen viser også, hvor hyppigt hvert af de nationalistiske ord nævnes af de respektive partier i deres taler.
+
+
+#Analyse 2: Sentimentanalyse med det danske værktøj "Sentida"
+
+```{r sentida - forberedelse til sentimentanalyse}
+#Installerer og indlæser Sentida
+library(Sentida)
+
+Sys.getlocale()
+
+
+Sys.setlocale("LC_ALL", "da_DK.UTF-8")
+
+
+```
+
+```{r opretter et nyt objekt med talerne nedbrudt i sætninger og udregner sentimentscore for de samlede taler}
+danske_taler_sentida <- danske_taler_sætninger %>% 
+  rowwise() %>% 
+  mutate(sentida_score = sentida(sentence)) 
+
+
+```
+
+```{r grupperer beregninger efter hvilke parti de hører til og regner gennemsnittet}
+danske_taler_sentida %>% 
+  group_by(doc_id) %>% 
+  summarise(gennemsnit_sentida = mean(sentida_score))
+```
+```{r laver en inddelingen af ordlisten for nationalistiske ord korrekt}
+str_c(nationalistiske_ord,collapse = "|")
+```
+
+```{r filtrerer sentidaanlayse så det kun er sætninger med nationalistiske ord, der indgår i den gennemsnitlige score og opretter nyt objekt for dette }
+total_nat_sentida <- danske_taler_sætninger %>% 
+  filter(str_detect(sentence,"danmark|dansker|dansk|grænser|grænse|grænsekontrol|samfund|tradition|os|vores|dem|deres|regeringen|velfærdssamfundet|bevare")) %>% 
+  rowwise() %>% 
+  mutate(sentida_score = sentida(sentence)) %>% 
+  group_by(doc_id) %>% 
+  summarise(total_nat_sentida = mean(sentida_score)) %>% 
+  arrange(desc(total_nat_sentida))
+```
+
+
+```{r lave visualisering (bar-chart) af de enkelte talers gennemsnitlige sentiment score for sætninger med nationalistiske ord} 
+ggplot(total_nat_sentida, aes(x = doc_id, y = total_nat_sentida, fill = doc_id)) + 
+  geom_bar(stat = "identity") +
+  theme_minimal() + 
+  labs(
+    title = "Talernes gennemsnitlige sentimentscore for nationalistiske ord", 
+    x = "parti",
+    y = "Gennemsnitlig sentiment score"
+  )
+```
+
+
+```{r gemmer vislualiseringen som png-fil}
+
+ggsave("visualisering/total_nat_sentida.png")
+
+```
+#opsummering: Vi har oprettet et søjlediagram hvor vi kan se den gennemsnitlige sentimentscore for nationalistiske ord i hver tale. Denne viser at de tre partier med de mest positive værdier er hhv. K, DF og V, mens EL har den mest negative sentiment score.
